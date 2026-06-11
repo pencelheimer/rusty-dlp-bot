@@ -3,7 +3,7 @@ services:
     image: ghcr.io/pencelheimer/rusty-dlp-bot:latest
     restart: unless-stopped
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELOXIDE_TOKEN: ${TELOXIDE_TOKEN}
       RUST_LOG: ${RUST_LOG:-warn,rusty_dlp_bot=info}
 
       # Uncomment to enable cookie-based auth
