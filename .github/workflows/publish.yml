@@ -3,6 +3,11 @@ name: Build and publish
 on:
   push:
     branches: [main]
+    paths:
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - Containerfile
 
 env:
   REGISTRY: ghcr.io

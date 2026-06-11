@@ -16,7 +16,7 @@ RUN cargo build --release
 FROM alpine AS runtime
 
 RUN apk add --no-cache ffmpeg python3 py3-pip ca-certificates \
-    && pip install --break-system-packages yt-dlp \
+    && pip install --break-system-packages yt-dlp
 
 COPY --from=builder /app/target/release/rusty-dlp-bot /usr/local/bin/
 
