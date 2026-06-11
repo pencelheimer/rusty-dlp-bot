@@ -1,0 +1,10 @@
+services:
+  bot:
+    image: ghcr.io/pencelheimer/rusty-dlp-bot:latest
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      RUST_LOG: ${RUST_LOG:-info}
+      YT_DLP_COOKIES: ${YT_DLP_COOKIES:-}
+    volumes:
+      - ${YT_DLP_COOKIES:-/dev/null}:${YT_DLP_COOKIES:-/dev/null}:ro
