@@ -12,7 +12,7 @@ use teloxide::{
     dispatching::{Dispatcher, UpdateFilterExt as _},
     types::Update,
 };
-use tracing::warn;
+use tracing::{info, warn};
 
 use handler::message_handler;
 use yt_dlp::{MediaKind, YtDlp};
@@ -20,7 +20,10 @@ use yt_dlp::{MediaKind, YtDlp};
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn,rusty_dlp_bot=info")),
+        )
         .init();
 
     let _ = dotenvy::dotenv().inspect_err(|_| warn!("`.env` is not loaded"));
@@ -36,22 +39,21 @@ async fn main() -> Result<()> {
             ("soundcloud.com", MediaKind::Audio),
         ]
         .into_iter()
-        .map(|(url, kind)| {
-            (url.into(), kind)
-        })
+        .map(|(host, kind)| (host.into(), kind))
         .collect(),
     );
 
     let bot = Bot::from_env();
 
-    let handler = dptree::entry().branch(Update::filter_message().endpoint(message_handler));
+    info!("starting bot");
 
-    Dispatcher::builder(bot, handler)
+    Dispatcher::builder(bot, dptree::entry().branch(Update::filter_message().endpoint(message_handler)))
         .dependencies(dptree::deps![allowed_domains, yt_dlp])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
         .await;
 
+    info!("shutting down");
     Ok(())
 }

@@ -5,7 +5,7 @@ use tracing::{info, instrument};
 
 use crate::{error::DownloadError, ext::BotExt, yt_dlp::{MediaKind, YtDlp}};
 
-#[instrument(skip(bot, yt_dlp), fields(%chat_id))]
+#[instrument(skip_all, fields(%url, ?kind))]
 pub async fn download_and_send(
     bot: &Bot,
     chat_id: ChatId,
@@ -14,7 +14,7 @@ pub async fn download_and_send(
     kind: MediaKind,
     yt_dlp: &Arc<YtDlp>,
 ) -> Result<(), DownloadError> {
-    info!(%url, ?kind, "downloading");
+    info!("starting download");
 
     let chat_action = match kind {
         MediaKind::Video => ChatAction::UploadVideo,
@@ -26,7 +26,7 @@ pub async fn download_and_send(
         .await
         .map_err(DownloadError::Download)?;
 
-    info!(?path, "sending");
+    info!(?path, "download complete, sending");
 
     match kind {
         MediaKind::Video => {
@@ -43,5 +43,6 @@ pub async fn download_and_send(
         }
     }
 
+    info!("sent successfully");
     Ok(())
 }

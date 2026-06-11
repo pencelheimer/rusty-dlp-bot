@@ -18,7 +18,6 @@ docker compose up -d
 | Reddit | Video |
 | TikTok | Video |
 | Instagram | Video |
-| YouTube | Video |
 | YouTube Music | Audio (MP3) |
 | SoundCloud | Audio (MP3) |
 

@@ -3,7 +3,7 @@ use std::{env, fmt, path::PathBuf};
 use anyhow::{Context, Result, bail};
 use tempfile::TempDir;
 use tokio::process::Command;
-use tracing::debug;
+use tracing::{debug, info, instrument};
 
 #[derive(Clone, Copy, Debug)]
 pub enum MediaKind {
@@ -41,9 +41,12 @@ impl YtDlp {
         let cookies = env::var("YT_DLP_COOKIES").ok().map(PathBuf::from);
         let tmp_dir = tempfile::tempdir().context("failed to create temp dir")?;
         let output_dir = tmp_dir.path().to_path_buf();
+
+        info!(?executable, ?cookies, "yt-dlp initialized");
         Ok(Self { executable, cookies, _tmp_dir: tmp_dir, output_dir })
     }
 
+    #[instrument(skip(self), fields(%url, ?kind))]
     pub async fn download(&self, url: &str, kind: MediaKind) -> Result<PathBuf> {
         let work_dir = tempfile::Builder::new()
             .tempdir_in(&self.output_dir)
@@ -72,6 +75,7 @@ impl YtDlp {
                 .arg("--embed-metadata");
         }
 
+        debug!("spawning yt-dlp");
         let output = cmd.output().await.context("failed to spawn yt-dlp")?;
 
         if !output.status.success() {
@@ -86,7 +90,7 @@ impl YtDlp {
             .find(|p| p.is_file())
             .context("yt-dlp produced no output file")?;
 
-        debug!(?path, "download complete");
+        info!(?path, "yt-dlp finished");
         Ok(path)
     }
 }
