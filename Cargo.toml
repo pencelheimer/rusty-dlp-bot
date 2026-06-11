@@ -6,5 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 dotenvy = "0.15.7"
+dptree = "0.5.1"
+teloxide = { version = "0.17.0", features = ["rustls", "throttle"] }
 tracing = "0.1.44"
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
