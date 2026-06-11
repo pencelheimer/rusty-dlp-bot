@@ -4,7 +4,9 @@ services:
     restart: unless-stopped
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      RUST_LOG: ${RUST_LOG:-info}
-      YT_DLP_COOKIES: ${YT_DLP_COOKIES:-}
-    volumes:
-      - ${YT_DLP_COOKIES:-/dev/null}:${YT_DLP_COOKIES:-/dev/null}:ro
+      RUST_LOG: ${RUST_LOG:-warn,rusty_dlp_bot=info}
+
+      # Uncomment to enable cookie-based auth
+      # YT_DLP_COOKIES: /cookies.txt
+    # volumes:
+    #   - /path/to/cookies.txt:/cookies.txt:ro
