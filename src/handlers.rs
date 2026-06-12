@@ -57,7 +57,7 @@ async fn stage_download(
 ) -> Result<(FileId, MessageId), String> {
     let path = downloader.download(url, kind).await.map_err(|e| {
         warn!(error = %e, "download failed");
-        format!("Download failed: {e}")
+        format!("❌ {e}\n\nPlease report to @pencel_z_kavunom")
     })?;
 
     info!(?path, "download complete, uploading to caller chat");
@@ -109,7 +109,7 @@ pub async fn on_auto(
 
     if let Err(e) = download_and_send(&bot, msg.chat.id, msg.id, url, kind, &downloader).await {
         warn!(error = %e, "download failed");
-        bot.send_message(msg.chat.id, format!("`{e}`"))
+        bot.send_message(msg.chat.id, format!("❌ {e}\n\nPlease report to @pencel_z_kavunom"))
             .reply_to(msg.id)
             .await?;
     }
@@ -152,7 +152,7 @@ pub async fn on_command(
 
     if let Err(e) = download_and_send(&bot, msg.chat.id, msg.id, url, kind, &downloader).await {
         warn!(error = %e, "download failed");
-        bot.send_message(msg.chat.id, format!("`{e}`"))
+        bot.send_message(msg.chat.id, format!("❌ {e}\n\nPlease report to @pencel_z_kavunom"))
             .reply_to(msg.id)
             .await?;
     }

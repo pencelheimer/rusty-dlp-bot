@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use teloxide::types::ChatAction;
 use tempfile::TempDir;
 use tokio::process::Command;
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument};
 
 #[derive(Clone, Copy, Debug)]
 pub enum MediaKind {
@@ -108,12 +108,14 @@ impl YtDlp {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stdout = String::from_utf8_lossy(&output.stdout);
-            bail!(
-                "yt-dlp exited with {}\nstdout: {}\nstderr: {}",
-                output.status,
-                stdout.trim(),
-                stderr.trim()
-            );
+            debug!(status = %output.status, stdout = %stdout.trim(), stderr = %stderr.trim(), "yt-dlp failed");
+
+            let reason = stderr
+                .lines()
+                .filter_map(|l| l.strip_prefix("ERROR: "))
+                .last()
+                .unwrap_or("unknown error");
+            bail!("{}", reason);
         }
 
         let path = std::fs::read_dir(&work_dir)
