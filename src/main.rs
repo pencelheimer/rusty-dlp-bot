@@ -1,54 +1,58 @@
+mod config;
 mod download;
+mod downloader;
 mod error;
 mod ext;
-mod handler;
+mod handlers;
+mod telemetry;
 mod yt_dlp;
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use teloxide::{
     Bot,
-    dispatching::{Dispatcher, UpdateFilterExt as _},
+    dispatching::{Dispatcher, HandlerExt as _, UpdateFilterExt as _},
+    requests::Requester,
     types::Update,
+    utils::command::BotCommands,
 };
 use tracing::{info, warn};
 
-use handler::message_handler;
-use yt_dlp::{MediaKind, YtDlp};
+use config::Config;
+use downloader::Downloader;
+use handlers::Command;
+use yt_dlp::YtDlp;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn,rusty_dlp_bot=info")),
-        )
-        .init();
+    telemetry::init();
 
     let _ = dotenvy::dotenv().inspect_err(|_| warn!("`.env` is not loaded"));
 
-    let yt_dlp = Arc::new(YtDlp::new()?);
-
-    let allowed_domains: Arc<HashMap<String, MediaKind>> = Arc::new(
-        [
-            ("www.reddit.com", MediaKind::Video),
-            ("vt.tiktok.com", MediaKind::Video),
-            ("www.instagram.com", MediaKind::Video),
-            ("music.youtube.com", MediaKind::Audio),
-            ("soundcloud.com", MediaKind::Audio),
-        ]
-        .into_iter()
-        .map(|(host, kind)| (host.into(), kind))
-        .collect(),
-    );
+    let config = Arc::new(Config::new()?);
+    let downloader = Arc::new(Downloader::new(YtDlp::new()?));
 
     let bot = Bot::from_env();
 
+    bot.set_my_commands(Command::bot_commands()).await?;
+
     info!("starting bot");
 
-    Dispatcher::builder(bot, dptree::entry().branch(Update::filter_message().endpoint(message_handler)))
-        .dependencies(dptree::deps![allowed_domains, yt_dlp])
+    let handler = dptree::entry()
+        .branch(
+            Update::filter_message()
+                .branch(
+                    dptree::entry()
+                        .filter_command::<Command>()
+                        .endpoint(handlers::on_command),
+                )
+                .branch(dptree::entry().endpoint(handlers::on_auto)),
+        )
+        .branch(Update::filter_guest_message().endpoint(handlers::on_guest_message));
+
+    Dispatcher::builder(bot, handler)
+        .dependencies(dptree::deps![config, downloader])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

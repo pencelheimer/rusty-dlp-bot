@@ -1,14 +1,24 @@
-use std::{env, fmt, path::PathBuf};
+use std::{env, ffi::OsStr, fmt, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
+use teloxide::types::ChatAction;
 use tempfile::TempDir;
 use tokio::process::Command;
-use tracing::{debug, info, instrument};
+use tracing::{info, instrument};
 
 #[derive(Clone, Copy, Debug)]
 pub enum MediaKind {
     Video,
     Audio,
+}
+
+impl From<MediaKind> for ChatAction {
+    fn from(value: MediaKind) -> Self {
+        match value {
+            MediaKind::Video => ChatAction::UploadVideo,
+            MediaKind::Audio => ChatAction::UploadVoice,
+        }
+    }
 }
 
 impl AsRef<str> for MediaKind {
@@ -43,11 +53,20 @@ impl YtDlp {
         let output_dir = tmp_dir.path().to_path_buf();
 
         info!(?executable, ?cookies, "yt-dlp initialized");
-        Ok(Self { executable, cookies, _tmp_dir: tmp_dir, output_dir })
+        Ok(Self {
+            executable,
+            cookies,
+            _tmp_dir: tmp_dir,
+            output_dir,
+        })
     }
 
-    #[instrument(skip(self), fields(%url, ?kind))]
-    pub async fn download(&self, url: &str, kind: MediaKind) -> Result<PathBuf> {
+    // TODO(pencelheimer): I don't like this function
+    #[instrument(skip_all, fields(
+        url = url.as_ref().to_str().map(|s| s.get(..80).unwrap_or(s)).unwrap_or("?"),
+        ?kind
+    ))]
+    pub async fn download(&self, url: impl AsRef<OsStr>, kind: MediaKind) -> Result<PathBuf> {
         let work_dir = tempfile::Builder::new()
             .tempdir_in(&self.output_dir)
             .context("failed to create work dir")?
@@ -56,7 +75,7 @@ impl YtDlp {
         let output_template = work_dir
             .join("%(title)s.%(ext)s")
             .to_string_lossy()
-            .to_string();
+            .into_owned();
 
         let mut cmd = Command::new(&self.executable);
         cmd.arg("--no-playlist")
@@ -64,23 +83,37 @@ impl YtDlp {
             .args(["--output", &output_template]);
 
         if let Some(cookies) = &self.cookies {
-            cmd.args(["--cookies", cookies.to_str().context("non-UTF-8 cookies path")?]);
+            cmd.args([
+                "--cookies",
+                cookies
+                    .to_str()
+                    .context("non-UTF-8 cookies path. Bro wtf?")?,
+            ]);
         }
 
         cmd.arg(url);
 
         if let MediaKind::Audio = kind {
-            cmd.arg("--extract-audio")
-                .args(["--audio-format", "mp3"])
-                .arg("--embed-metadata");
+            cmd.args([
+                "--extract-audio",
+                "--audio-format",
+                "mp3",
+                "--embed-metadata",
+            ]);
         }
 
-        debug!("spawning yt-dlp");
+        info!("spawning yt-dlp");
         let output = cmd.output().await.context("failed to spawn yt-dlp")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("yt-dlp failed: {}", stderr.trim());
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            bail!(
+                "yt-dlp exited with {}\nstdout: {}\nstderr: {}",
+                output.status,
+                stdout.trim(),
+                stderr.trim()
+            );
         }
 
         let path = std::fs::read_dir(&work_dir)

@@ -8,5 +8,9 @@ services:
 
       # Uncomment to enable cookie-based auth
       # YT_DLP_COOKIES: /cookies.txt
+
+      # Uncomment to load config from a custom path instead of the baked-in /app/config.toml
+      # CONFIG_PATH: /config.toml
     # volumes:
     #   - /path/to/cookies.txt:/cookies.txt:ro
+    #   - /path/to/config.toml:/config.toml:ro

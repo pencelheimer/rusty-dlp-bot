@@ -1,0 +1,10 @@
+video = [
+    "reddit.com",
+    "tiktok.com",
+    "instagram.com",
+]
+
+audio = [
+    "music.youtube.com",
+    "soundcloud.com",
+]
