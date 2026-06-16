@@ -29,7 +29,7 @@ pub enum Command {
 
 fn resolve_url<'a>(arg: &'a str, replied: Option<&'a Message>) -> Option<&'a str> {
     if !arg.is_empty() {
-        Some(arg)
+        extract_url(arg)
     } else {
         replied.and_then(|m| m.text()).and_then(extract_url)
     }
@@ -109,9 +109,12 @@ pub async fn on_auto(
 
     if let Err(e) = download_and_send(&bot, msg.chat.id, msg.id, url, kind, &downloader).await {
         warn!(error = %e, "download failed");
-        bot.send_message(msg.chat.id, format!("❌ {e}\n\nPlease report to @pencel_z_kavunom"))
-            .reply_to(msg.id)
-            .await?;
+        bot.send_message(
+            msg.chat.id,
+            format!("❌ {e}\n\nPlease report to @pencel_z_kavunom"),
+        )
+        .reply_to(msg.id)
+        .await?;
     }
 
     Ok(())
@@ -152,9 +155,12 @@ pub async fn on_command(
 
     if let Err(e) = download_and_send(&bot, msg.chat.id, msg.id, url, kind, &downloader).await {
         warn!(error = %e, "download failed");
-        bot.send_message(msg.chat.id, format!("❌ {e}\n\nPlease report to @pencel_z_kavunom"))
-            .reply_to(msg.id)
-            .await?;
+        bot.send_message(
+            msg.chat.id,
+            format!("❌ {e}\n\nPlease report to @pencel_z_kavunom"),
+        )
+        .reply_to(msg.id)
+        .await?;
     }
 
     Ok(())
@@ -170,10 +176,17 @@ pub async fn on_guest_message(
     let Some(text) = msg.text() else {
         return Ok(());
     };
-    let Some(url) = extract_url(text) else {
-        debug!("no url in guest message");
+
+    let Some(url) = resolve_url(text.trim(), msg.reply_to_message()) else {
+        bot.send_message(
+            msg.chat.id,
+            "Provide a URL, or reply to a message containing one.",
+        )
+        .reply_to(msg.id)
+        .await?;
         return Ok(());
     };
+
     let Some(kind) = config.kind_for(url) else {
         debug!(
             url = url.get(..80).unwrap_or(url),
