@@ -6,8 +6,7 @@ use teloxide::{
     requests::{Requester, ResponseResult},
     sugar::request::RequestReplyExt,
     types::{
-        ChatId, FileId, InlineQueryResult, InlineQueryResultArticle, InputFile, InputMedia,
-        InputMediaAudio, InputMediaVideo, InputMessageContent, InputMessageContentText, Message,
+        ChatId, FileId, InputFile, InputMedia, InputMediaAudio, InputMediaVideo, Message,
         MessageId, MessageKind, User,
     },
     utils::command::BotCommands,
@@ -15,7 +14,8 @@ use teloxide::{
 use tracing::{debug, info, instrument, warn};
 
 use crate::{
-    config::Config, download::download_and_send, downloader::Downloader, yt_dlp::MediaKind,
+    config::Config, download::download_and_send, downloader::Downloader, ext::BotExt as _,
+    yt_dlp::MediaKind,
 };
 
 #[derive(BotCommands, Clone)]
@@ -173,17 +173,35 @@ pub async fn on_guest_message(
     config: Arc<Config>,
     downloader: Arc<Downloader>,
 ) -> ResponseResult<()> {
-    let Some(text) = msg.text() else {
+    let MessageKind::Common(common) = &msg.kind else {
+        warn!("guest message is not MessageKind::Common");
         return Ok(());
     };
 
-    let Some(url) = resolve_url(text.trim(), msg.reply_to_message()) else {
-        bot.send_message(
-            msg.chat.id,
+    let Some(guest_query_id) = &common.guest_query_id else {
+        warn!(guest_query_id = ?common.guest_query_id, "message missing guest_query_id");
+        return Ok(());
+    };
+
+    let Some(caller) = &msg.from else {
+        warn!(from = ?msg.from, "message missing sender");
+        return Ok(());
+    };
+
+    let Some(text) = msg.text() else {
+        warn!("message missing text");
+        return Ok(());
+    };
+
+    let Some(url) = resolve_url(text.trim(), common.reply_to_message.as_deref()) else {
+        bot.answer_guest_query_with_text(
+            guest_query_id,
+            "error",
+            "Provide a URL, or reply to a message containing one.",
             "Provide a URL, or reply to a message containing one.",
         )
-        .reply_to(msg.id)
         .await?;
+
         return Ok(());
     };
 
@@ -195,24 +213,14 @@ pub async fn on_guest_message(
         return Ok(());
     };
 
-    let MessageKind::Common(common) = &msg.kind else {
-        warn!("guest message is not MessageKind::Common");
-        return Ok(());
-    };
-    let (Some(guest_query_id), Some(caller)) = (&common.guest_query_id, &msg.from) else {
-        warn!(guest_query_id = ?common.guest_query_id, from = ?msg.from, "missing guest_query_id or sender");
-        return Ok(());
-    };
     info!(guest_query_id, caller_id = %caller.id, ?kind, "starting guest download");
 
     let sent = bot
-        .answer_guest_query(
+        .answer_guest_query_with_text(
             guest_query_id,
-            InlineQueryResult::Article(InlineQueryResultArticle::new(
-                "progress",
-                "⏳ Downloading...",
-                InputMessageContent::Text(InputMessageContentText::new("Downloading...")),
-            )),
+            "progress",
+            "⏳ Downloading...",
+            "Downloading...",
         )
         .await?;
 
