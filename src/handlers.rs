@@ -193,7 +193,11 @@ pub async fn on_guest_message(
         return Ok(());
     };
 
-    let Some(url) = resolve_url(text.trim(), common.reply_to_message.as_deref()) else {
+    let Some(url) = resolve_url(
+        // TODO(pencelheimer): should replace with the env var
+        text.trim().strip_prefix("@RustyDLPBot").unwrap_or_default(),
+        common.reply_to_message.as_deref(),
+    ) else {
         bot.answer_guest_query_with_text(
             guest_query_id,
             "error",
