@@ -15,9 +15,9 @@ RUN cargo build --release
 FROM alpine AS runtime
 
 RUN apk add --no-cache ffmpeg python3 py3-pip ca-certificates nodejs \
-    && pip install --break-system-packages "yt-dlp[default]"
+    && pip install --break-system-packages "yt-dlp[default,curl-cffi]"
 
-ENV RUSTY_DLP_UPDATE_COMMAND='pip install --upgrade --break-system-packages "yt-dlp[default]"'
+ENV RUSTY_DLP_UPDATE_COMMAND='pip install --upgrade --break-system-packages "yt-dlp[default,curl-cffi]"'
 
 RUN echo '--js-runtimes node' > /etc/yt-dlp.conf
 

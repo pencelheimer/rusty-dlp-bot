@@ -1,10 +1,10 @@
-use std::{fmt, fs, path::PathBuf, str::FromStr};
+use std::{fmt, path::PathBuf, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use teloxide::types::{
     FileId, InputFile, InputMedia, InputMediaAudio, InputMediaVideo, Message,
 };
-use tracing::warn;
+use tempfile::TempDir;
 
 // NOTE(pencelheimer): also update the impl FromStr when adding new variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -16,19 +16,18 @@ pub enum MediaKind {
     // Image,
 }
 
-/// A downloaded file. It is removed from disk when dropped, so the handlers don't have to clean up
-/// on every exit path. yt-dlp keeps its own copy in the cache dir.
+/// A downloaded file. It lives in its own temporary directory, which is removed when the media is
+/// dropped, so the handlers don't have to clean up on every exit path.
 #[derive(Debug)]
 pub struct Media {
     pub kind: MediaKind,
     pub path: PathBuf,
+    _dir: TempDir,
 }
 
-impl Drop for Media {
-    fn drop(&mut self) {
-        if let Err(e) = fs::remove_file(&self.path) {
-            warn!(path = %self.path.display(), error = %e, "failed to remove the sent file");
-        }
+impl Media {
+    pub fn new(kind: MediaKind, path: PathBuf, dir: TempDir) -> Self {
+        Self { kind, path, _dir: dir }
     }
 }
 

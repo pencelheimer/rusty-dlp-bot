@@ -2,18 +2,11 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 
 use anyhow::{Context, Result, anyhow};
 use tokio::{process::Command, sync::Semaphore, task::JoinSet};
 use tracing::instrument;
-use yt_dlp::{
-    cache::CacheConfig,
-    client::{Downloader as YtDlpDownloader, Libraries},
-    download::{AudioCodec, PostProcessConfig},
-    model::Video,
-};
 
 use crate::{
     config::Config,
@@ -21,58 +14,50 @@ use crate::{
     media::{Media, MediaKind},
 };
 
-const MP3_BITRATE: &str = "192k";
+const MP3_QUALITY: &str = "192K";
 
 /// How many files of one bulk download are fetched at the same time.
 const BULK_CONCURRENCY: usize = 3;
 
-const CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 const UPDATE_COMMAND_VAR: &str = "RUSTY_DLP_UPDATE_COMMAND";
 
 const OUTPUT_DIR: &str = "output";
-const CACHE_DIR: &str = "cache";
 
 fn fmt_size(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+}
+
+/// The `ERROR:` lines yt-dlp printed, or all of stderr if there are none.
+fn yt_dlp_error(stderr: &[u8]) -> String {
+    let stderr = String::from_utf8_lossy(stderr);
+    let errors: Vec<_> = stderr
+        .lines()
+        .filter_map(|line| line.strip_prefix("ERROR: "))
+        .collect();
+
+    if errors.is_empty() {
+        stderr.trim().to_owned()
+    } else {
+        errors.join("\n")
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Downloader {
     config: Arc<Config>,
 
-    yt_dlp: YtDlpDownloader,
+    yt_dlp: PathBuf,
+    /// `None` lets yt-dlp find ffmpeg in `PATH`, `--ffmpeg-location` only takes a path.
+    ffmpeg: Option<PathBuf>,
 }
 
 impl Downloader {
-    pub async fn new(config: Arc<Config>) -> Result<Self> {
-        let libs = Libraries::new(
-            env::var_os("RUSTY_DLP_YT_DLP").map_or_else(|| PathBuf::from("yt-dlp"), PathBuf::from),
-            env::var_os("RUSTY_DLP_FFMPEG").map_or_else(|| PathBuf::from("ffmpeg"), PathBuf::from),
-        );
-
-        let ttl = Some(CACHE_TTL.as_secs());
-        let cache_config = CacheConfig::builder()
-            .cache_dir(PathBuf::from(CACHE_DIR))
-            .video_ttl(ttl)
-            .playlist_ttl(ttl)
-            .download_ttl(ttl)
-            .build();
-
-        // NOTE(pencelheimer): The file must exist from the start for `/setcookies` to take effect
-        // without a restart. An empty jar is harmless.
-        if !config.cookies_file.is_file() {
-            fs::write(&config.cookies_file, "# Netscape HTTP Cookie File\n")
-                .with_context(|| format!("Can't create {}", config.cookies_file.display()))?;
+    pub fn new(config: Arc<Config>) -> Self {
+        Self {
+            config,
+            yt_dlp: env::var_os("RUSTY_DLP_YT_DLP").map_or_else(|| PathBuf::from("yt-dlp"), PathBuf::from),
+            ffmpeg: env::var_os("RUSTY_DLP_FFMPEG").map(PathBuf::from),
         }
-
-        let yt_dlp = YtDlpDownloader::builder(libs, OUTPUT_DIR)
-            .with_cache_config(cache_config)
-            .with_cookies(&config.cookies_file)
-            .build()
-            .await
-            .context("Can't init the yt-dlp downloader")?;
-
-        Ok(Self { yt_dlp, config })
     }
 
     /// Runs the shell command from `RUSTY_DLP_UPDATE_COMMAND`. How yt-dlp was installed decides how
@@ -102,18 +87,14 @@ impl Downloader {
     pub async fn download(&self, link: &Link) -> Result<Media> {
         // TODO(pencelheimer): maybe should check the first segment as well? e.g. for handling "youtube.com/playlist" differently
 
-        let video = self
-            .yt_dlp
-            .fetch_video_infos(&link.url)
-            .await
-            .context("Can't fetch the video infos from the given URL")?;
+        // NOTE(pencelheimer): every download gets its own directory, so the same video requested
+        // twice at once doesn't clash. It is removed on drop, so on any error below as well
+        fs::create_dir_all(OUTPUT_DIR).context("Can't create the output directory")?;
+        let dir = tempfile::tempdir_in(OUTPUT_DIR).context("Can't create a download directory")?;
 
-        let path = match link.kind {
-            MediaKind::Video => self.download_video(&video).await?,
-            MediaKind::Audio => self.download_audio(&video).await?,
-        };
+        let path = self.run_yt_dlp(link, dir.path()).await?;
 
-        let media = Media { kind: link.kind, path };
+        let media = Media::new(link.kind, path, dir);
         self.ensure_fits(&media)?;
 
         Ok(media)
@@ -144,6 +125,66 @@ impl Downloader {
         tasks.join_all().await
     }
 
+    /// Downloads the best quality into `dir` and returns the path of the final file.
+    async fn run_yt_dlp(&self, link: &Link, dir: &Path) -> Result<PathBuf> {
+        let limit = self.config.max_file_size();
+
+        let mut command = Command::new(&self.yt_dlp);
+        command
+            // NOTE(pencelheimer): the download is aborted together with the handler, e.g. on a timeout
+            .kill_on_drop(true)
+            .args(["--no-playlist", "--no-simulate", "--print", "after_move:filepath"])
+            .args(["--max-filesize", &limit.to_string()])
+            .arg("--paths")
+            .arg(dir)
+            .args(["--output", "%(title).150B.%(ext)s"])
+            .arg("--embed-metadata");
+
+        if let Some(ffmpeg) = &self.ffmpeg {
+            command.arg("--ffmpeg-location").arg(ffmpeg);
+        }
+        if self.config.cookies_file.is_file() {
+            command.arg("--cookies").arg(&self.config.cookies_file);
+        }
+
+        match link.kind {
+            // NOTE(pencelheimer): H.264 is preferred at the same resolution, Telegram plays it everywhere
+            MediaKind::Video => command.args([
+                "--format", "bv*+ba/b",
+                "--format-sort", "res,vcodec:h264",
+                "--merge-output-format", "mp4",
+            ]),
+            MediaKind::Audio => command.args([
+                "--format", "ba/b",
+                "--extract-audio",
+                "--audio-format", "mp3",
+                "--audio-quality", MP3_QUALITY,
+                // NOTE(pencelheimer): the cover, as jpg, which MP3 supports
+                "--embed-thumbnail",
+                "--convert-thumbnails", "jpg",
+            ]),
+        };
+
+        let output = command
+            .arg("--")
+            .arg(link.url.as_str())
+            .output()
+            .await
+            .context("Can't run yt-dlp")?;
+
+        if !output.status.success() {
+            return Err(anyhow!("{}", yt_dlp_error(&output.stderr)));
+        }
+
+        // NOTE(pencelheimer): yt-dlp skips a file over `--max-filesize` without failing, nothing is
+        // printed then
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .last()
+            .map(PathBuf::from)
+            .ok_or_else(|| anyhow!("The file is too large to send, the limit is {}", fmt_size(limit)))
+    }
+
     fn ensure_fits(&self, media: &Media) -> Result<()> {
         let limit = self.config.max_file_size();
         let size = fs::metadata(&media.path)
@@ -159,38 +200,5 @@ impl Downloader {
         }
 
         Ok(())
-    }
-
-    async fn download_video(&self, video: &Video) -> Result<PathBuf> {
-        self.yt_dlp
-            .download_video(video, format!("{}.mp4", video.title))
-            .await
-            .context("Can't save video")
-    }
-
-    async fn download_audio(&self, audio: &Video) -> Result<PathBuf> {
-        // NOTE(pencelheimer): YouTube has no MP3 streams, so the best audio is downloaded as is and converted
-        let source = self
-            .yt_dlp
-            .download_audio_stream(audio, format!("{}.source", audio.title))
-            .await
-            .context("Can't save audio")?;
-
-        // NOTE(pencelheimer): a leftover file would make ffmpeg fail
-        let target = format!("{}.mp3", audio.title);
-        let _ = fs::remove_file(Path::new(OUTPUT_DIR).join(&target));
-
-        let config = PostProcessConfig::new()
-            .with_audio_codec(AudioCodec::MP3)
-            .with_audio_bitrate(MP3_BITRATE);
-
-        let converted = self
-            .yt_dlp
-            .postprocess_video(&source, target, config)
-            .await
-            .context("Can't convert audio to MP3");
-
-        let _ = fs::remove_file(&source);
-        converted
     }
 }

@@ -2,7 +2,6 @@
 .github
 .env
 target
-cache
 output
 cookies.txt
 config.toml

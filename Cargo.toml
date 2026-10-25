@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1.0.104"
 dotenvy = "0.15.7"
 dptree = "0.5.1"
+tempfile = "3"
 serde = { version = "1", features = ["derive"] }
 teloxide = { git = "https://github.com/lapismyt/teloxide", branch = "bot-api-10-0", default-features = false, features = ["rustls", "throttle", "macros", "ctrlc_handler"] }
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "process"] }
@@ -14,4 +15,3 @@ toml = "1.1.4"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
-yt-dlp = { version = "2.8.1", features = ["rustls", "cache-json"] }

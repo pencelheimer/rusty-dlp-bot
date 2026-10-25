@@ -46,9 +46,7 @@ async fn main() -> Result<()> {
 
     let config = Arc::new(Config::new().context("Can't load config")?);
 
-    let downloader = Downloader::new(config.clone())
-        .await
-        .context("Can't init Downloader")?;
+    let downloader = Downloader::new(config.clone());
 
     bot.set_my_commands(Command::bot_commands())
         .await
