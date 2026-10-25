@@ -10,6 +10,7 @@ on:
       - Containerfile
       - config.toml
       - yt-dlp-musiclink-extractor.py
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
