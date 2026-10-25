@@ -1,0 +1,48 @@
+admins = [
+  "pencel_z_kavunom"
+]
+
+cookies_file = "./cookies.txt"
+
+max_file_size_mb = 50
+
+[sources]
+# YouTube
+"youtube.com" = "video"
+"www.youtube.com" = "video"
+"m.youtube.com" = "video"
+"youtu.be" = "video"
+"music.youtube.com" = "audio"
+
+# Reddit
+"reddit.com" = "video"
+"www.reddit.com" = "video"
+"old.reddit.com" = "video"
+"v.redd.it" = "video"
+"redd.it" = "video"
+
+# TikTok
+"tiktok.com" = "video"
+"www.tiktok.com" = "video"
+"m.tiktok.com" = "video"
+"vm.tiktok.com" = "video"
+"vt.tiktok.com" = "video"
+
+# Instagram
+"instagram.com" = "video"
+"www.instagram.com" = "video"
+"instagr.am" = "video"
+
+# SoundCloud
+"soundcloud.com" = "audio"
+"www.soundcloud.com" = "audio"
+"m.soundcloud.com" = "audio"
+"on.soundcloud.com" = "audio"
+
+# Resolved to YouTube Music by the `musiclink` yt-dlp plugin (needs RUSTY_DLP_MUSICLINK_API_KEY)
+"open.spotify.com" = "audio"
+"deezer.com" = "audio"
+"www.deezer.com" = "audio"
+"music.apple.com" = "audio"
+"tidal.com" = "audio"
+"listen.tidal.com" = "audio"

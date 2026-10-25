@@ -1,0 +1,19 @@
+# TODO(pencelheimer): add a local Telegram Bot API server (`aiogram/telegram-bot-api` or a build of
+# tdlib/telegram-bot-api, `--local` mode) as a service, share the files volume with the bot and
+# make the bot use it, see main.rs.
+services:
+  bot:
+    image: ghcr.io/pencelheimer/rusty-dlp-bot:latest
+    restart: unless-stopped
+    environment:
+      RUSTY_DLP_BOT_TOKEN: ${RUSTY_DLP_BOT_TOKEN}
+      RUSTY_DLP_LOG: ${RUSTY_DLP_LOG:-warn,rusty_dlp_bot=info}
+      RUSTY_DLP_MUSICLINK_API_KEY: ${RUSTY_DLP_MUSICLINK_API_KEY:-}
+
+    volumes:
+      # Netscape-format cookies for authenticated downloads (yt-dlp may update the file, so not read-only).
+      # Create the file first (`touch cookies.txt`), otherwise Docker creates a directory in its place.
+      - ./cookies.txt:/app/cookies.txt
+      # Bot config (kept writable for runtime config updates).
+      # Create the file first, otherwise Docker creates a directory in its place.
+      - ./config.toml:/app/config.toml
