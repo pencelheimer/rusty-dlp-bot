@@ -1,5 +1,6 @@
 use std::{
     env, fs,
+    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -90,7 +91,11 @@ impl Downloader {
         // NOTE(pencelheimer): every download gets its own directory, so the same video requested
         // twice at once doesn't clash. It is removed on drop, so on any error below as well
         fs::create_dir_all(OUTPUT_DIR).context("Can't create the output directory")?;
-        let dir = tempfile::tempdir_in(OUTPUT_DIR).context("Can't create a download directory")?;
+        // NOTE(pencelheimer): readable by others, a local Bot API server reads the files as its own user
+        let dir = tempfile::Builder::new()
+            .permissions(fs::Permissions::from_mode(0o755))
+            .tempdir_in(OUTPUT_DIR)
+            .context("Can't create a download directory")?;
 
         let path = self.run_yt_dlp(link, dir.path()).await?;
 

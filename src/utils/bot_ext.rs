@@ -13,7 +13,10 @@ use teloxide::{
 
 use tracing::warn;
 
-use crate::media::{Media, MediaKind};
+use crate::{
+    bot_api,
+    media::{Media, MediaKind},
+};
 
 /// The most files Telegram accepts in one album.
 pub const ALBUM_SIZE: usize = 10;
@@ -94,7 +97,7 @@ impl BotExt for Bot {
         media: &Media,
         reply_to: Option<MessageId>,
     ) -> Result<Message, RequestError> {
-        let file = InputFile::file(&media.path);
+        let file = bot_api::input_file(&media.path);
         match media.kind {
             MediaKind::Video => {
                 let mut request = self.send_video(chat_id, file);
@@ -130,7 +133,7 @@ impl BotExt for Bot {
 
                 let album = chunk
                     .iter()
-                    .map(|media| kind.to_input_media(InputFile::file(&media.path)));
+                    .map(|media| kind.to_input_media(bot_api::input_file(&media.path)));
                 let mut request = self.send_media_group(chat_id, album);
                 if let Some(id) = reply_to {
                     request = request.reply_to(id);

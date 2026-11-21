@@ -20,7 +20,25 @@ at `<plugin dir>/musiclink/yt_dlp_plugins/extractor/musiclink.py` (see yt-dlp's
 ## Configuration
 
 `config.toml` holds the admins, the supported hosts (`[sources]`, exact host → `video` | `audio`)
-and `max_file_size_mb` (50 MB is the Telegram limit; bigger files are rejected).
+and `max_file_size_mb` (bigger files are rejected; defaults to the upload limit of the Bot API
+server: 50 MB for the cloud one, 2000 MB for a local one).
+
+## Local Bot API server
+
+A self-hosted [telegram-bot-api](https://github.com/tdlib/telegram-bot-api) server in `--local`
+mode lifts the upload limit from 50 MB to 2000 MB. `compose.yml` has one under the `local-api`
+profile:
+
+1. Get an `api_id` and `api_hash` at <https://my.telegram.org/apps>.
+2. Log the bot out of the cloud Bot API, otherwise the local server can't take over (switching
+   back is possible only 10 minutes later):
+   `curl https://api.telegram.org/bot<token>/logOut`
+3. Uncomment the local server block in `.env` and run `docker compose up -d`.
+
+`RUSTY_DLP_API_URL` points the bot at the server. `RUSTY_DLP_API_LOCAL` tells it that the server
+shares its filesystem: files are sent by path instead of being uploaded, and files from `getFile`
+are read from the server's working directory, so both directories have to be mounted at the same
+paths in both containers (as in `compose.yml`).
 
 ## Commands
 

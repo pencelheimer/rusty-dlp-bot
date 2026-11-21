@@ -4,7 +4,6 @@ use anyhow::{Context, Result, anyhow};
 use dptree::Handler;
 use teloxide::{
     dispatching::DpHandlerDescription,
-    net::Download,
     prelude::*,
     sugar::request::RequestReplyExt,
     types::ParseMode,
@@ -12,7 +11,7 @@ use teloxide::{
 };
 use tracing::{info, instrument, warn};
 
-use crate::{config::Config, downloader::Downloader, media::MediaKind, ml};
+use crate::{bot_api, config::Config, downloader::Downloader, media::MediaKind, ml};
 
 pub fn dispatcher() -> Handler<'static, Result<()>, DpHandlerDescription> {
     Update::filter_message()
@@ -213,8 +212,7 @@ async fn set_cookies(bot: &Bot, msg: &Message, config: &Config) -> Result<String
     };
 
     let file = bot.get_file(doc.file.id.clone()).await?;
-    let mut data = Vec::new();
-    bot.download_file(&file.path, &mut data).await?;
+    let data = bot_api::download_file(bot, &file.path).await?;
 
     fs::write(&config.cookies_file, data).context("Can't write the cookies")?;
 

@@ -4,7 +4,8 @@ admins = [
 
 cookies_file = "./cookies.txt"
 
-max_file_size_mb = 50
+# Defaults to the Bot API upload limit: 50 MB, or 2000 MB with a local server (RUSTY_DLP_API_LOCAL)
+# max_file_size_mb = 50
 
 [sources]
 # YouTube

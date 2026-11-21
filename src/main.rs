@@ -1,3 +1,4 @@
+mod bot_api;
 mod config;
 mod downloader;
 mod media;
@@ -40,9 +41,9 @@ async fn main() -> Result<()> {
 
     let _ = dotenvy::dotenv().inspect_err(|_| warn!("`.env` is not loaded"));
 
-    // TODO(pencelheimer): point the bot at the local Bot API server (`Bot::set_api_url`, e.g. from
-    // `RUSTY_DLP_API_URL`) to lift the 50 MB upload limit of the cloud Bot API.
     let bot = Bot::new(env::var("RUSTY_DLP_BOT_TOKEN").context("RUSTY_DLP_BOT_TOKEN is not set")?);
+    // A self-hosted Bot API server lifts the 50 MB upload limit of the cloud one.
+    let bot = bot_api::configure(bot)?;
 
     let config = Arc::new(Config::new().context("Can't load config")?);
 

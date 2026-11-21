@@ -9,15 +9,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::media::MediaKind;
+use crate::{bot_api, media::MediaKind};
 
 fn default_cookies_path() -> PathBuf {
     PathBuf::from("./cookies.txt")
-}
-
-/// Telegram's upload limit for bots on the cloud Bot API.
-fn default_max_file_size_mb() -> u64 {
-    50
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,8 +23,9 @@ pub struct Config {
     #[serde(default = "default_cookies_path")]
     pub cookies_file: PathBuf,
 
-    #[serde(default = "default_max_file_size_mb")]
-    pub max_file_size_mb: u64,
+    /// Defaults to the upload limit of the Bot API server in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_file_size_mb: Option<u64>,
 
     #[serde(default)]
     admins: RwLock<Vec<String>>,
@@ -58,7 +54,12 @@ impl Config {
     }
 
     pub fn max_file_size(&self) -> u64 {
-        self.max_file_size_mb * 1_000_000
+        let mb = self.max_file_size_mb.unwrap_or(if bot_api::is_local() {
+            bot_api::LOCAL_MAX_FILE_SIZE_MB
+        } else {
+            bot_api::CLOUD_MAX_FILE_SIZE_MB
+        });
+        mb * 1_000_000
     }
 
     pub fn kind_for(&self, url: &Url) -> Option<MediaKind> {

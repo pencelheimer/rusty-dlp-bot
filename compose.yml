@@ -1,6 +1,3 @@
-# TODO(pencelheimer): add a local Telegram Bot API server (`aiogram/telegram-bot-api` or a build of
-# tdlib/telegram-bot-api, `--local` mode) as a service, share the files volume with the bot and
-# make the bot use it, see main.rs.
 services:
   bot:
     image: ghcr.io/pencelheimer/rusty-dlp-bot:latest
@@ -9,6 +6,9 @@ services:
       RUSTY_DLP_BOT_TOKEN: ${RUSTY_DLP_BOT_TOKEN}
       RUSTY_DLP_LOG: ${RUSTY_DLP_LOG:-warn,rusty_dlp_bot=info}
       RUSTY_DLP_MUSICLINK_API_KEY: ${RUSTY_DLP_MUSICLINK_API_KEY:-}
+      # Set both in `.env` along with `COMPOSE_PROFILES=local-api` to use the local Bot API server.
+      RUSTY_DLP_API_URL: ${RUSTY_DLP_API_URL:-}
+      RUSTY_DLP_API_LOCAL: ${RUSTY_DLP_API_LOCAL:-}
 
     volumes:
       # Netscape-format cookies for authenticated downloads (yt-dlp may update the file, so not read-only).
@@ -17,3 +17,32 @@ services:
       # Bot config (kept writable for runtime config updates).
       # Create the file first, otherwise Docker creates a directory in its place.
       - ./config.toml:/app/config.toml
+      # Shared with the local Bot API server at the same paths: it reads the downloads to send them,
+      # and the bot reads the files the server saves for `getFile` (e.g. for /setcookies).
+      - downloads:/app/output
+      - bot-api-data:/var/lib/telegram-bot-api:ro
+
+    depends_on:
+      telegram-bot-api:
+        condition: service_started
+        required: false
+
+  # Local Bot API server in `--local` mode: lifts the upload limit from 50 MB to 2000 MB.
+  # Enabled by the `local-api` profile. Before the first start, log the bot out of the cloud Bot API
+  # (see README.md).
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    profiles: [local-api]
+    restart: unless-stopped
+    environment:
+      # From https://my.telegram.org/apps
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - downloads:/app/output:ro
+      - bot-api-data:/var/lib/telegram-bot-api
+
+volumes:
+  downloads:
+  bot-api-data:
